@@ -45,7 +45,7 @@
       let gridImage = new Image();
 
       let color = new Color(0, 0, 0, 255), variance = 0, alphaVariance = 0;
-      let size = 40;
+      let size = Math.round(Math.min(c.width, c.height) / 16);
       let squares = [], undoStack = [], redoStack = [];
 
       changePixelSize();
@@ -187,6 +187,7 @@
         Mouse.button = -1;
       }
       window.oncontextmenu = function(e){return false;}
+      window.onblur = function(e){Mouse.button = -1;}
 
       let line = false;
       window.onkeydown = function(e){
