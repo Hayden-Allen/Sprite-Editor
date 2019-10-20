@@ -35,18 +35,19 @@
     <script src = "SquareState.js"></script>
     <script src = "Color.js"></script>
     <script>
-      let c = document.getElementById("c");
+      let c = document.getElementById("c"); //canvas
       let hBuffer = 100;
+      //resize canvas
       c.height = window.innerHeight - hBuffer;
       c.width = c.height;
-      let ctx = c.getContext("2d");
+      let ctx = c.getContext("2d"); //draw context
 
-      let grid = true, saveWhitespace = false;
-      let gridImage = new Image();
+      let grid = true, saveWhitespace = false;  //draw grid, save whitespace when converting to Image
+      let gridImage = new Image();  //image to store grid pattern
 
-      let color = new Color(0, 0, 0, 255), variance = 0, alphaVariance = 0;
-      let size = Math.round(Math.min(c.width, c.height) / 16);
-      let squares = [], undoStack = [], redoStack = [];
+      let color = new Color(0, 0, 0, 255), variance = 0, alphaVariance = 0; //default color is black
+      let size = Math.round(Math.min(c.width, c.height) / 16);  //size of each pixel
+      let squares = [], undoStack = [], redoStack = []; //for undo and redo operations
 
       changePixelSize();
       changeCanvasSize(c.width, c.height);
@@ -56,8 +57,10 @@
         c.width = w;
         c.height = h;
 
+        //# of squares wide and tall the canvas is
         let sw = parseInt(c.width / size), sh = parseInt(c.height / size);
 
+        //resize squares array
         while(squares.length < sh)
           squares.push(new Array(sw).fill(null));
         while(squares.length > sh)
@@ -74,142 +77,158 @@
         drawGrid();
         drawSquares();
       }
-      function changePixelSize(){
+      function changePixelSize(){ //resize canvas
         c.height = parseInt((window.innerHeight - hBuffer) / size) * size;
         c.width = c.height;
       }
-      function drawGrid(){
-        ctx.clearRect(0, 0, c.width, c.height);
+      function drawGrid(){  //draw grid lines and save as image to reduce processing each frame
+        ctx.clearRect(0, 0, c.width, c.height); //clear screen
 
-        for(var i = 0; i <= c.width; i += size){
+        for(var i = 0; i <= c.width; i += size){  //horizontal lines
           ctx.moveTo(i, 0);
           ctx.lineTo(i, c.height);
           ctx.stroke();
         }
-        for(var i = 0; i <= c.height; i += size){
+        for(var i = 0; i <= c.height; i += size){ //vertical lines
           ctx.moveTo(0, i);
           ctx.lineTo(c.width, i);
           ctx.stroke();
         }
-        gridImage.src = c.toDataURL();
-        ctx.clearRect(0, 0, c.width, c.height);
+        gridImage.src = c.toDataURL();  //save as image
+        ctx.clearRect(0, 0, c.width, c.height); //clear screen
 
-        gridImage.onload = function(){
+        gridImage.onload = function(){  //when image is ready, draw it
           if(grid)
             ctx.drawImage(gridImage, 0, 0, c.width, c.height);
         }
       }
-      function addSquare(x, y, redo){
-        if(!redo)
+      function addSquare(x, y, redo){ //positions and whether or not this is a redo operation. Called when left click is pressed
+        if(!redo) //if this is a new operation, clear redo stack
           redoStack = [];
 
-        let sColor = color.copy();
+        let sColor = color.copy();  //current color
+        //randomize current color according to variances
         sColor.setRed(sColor.r + parseInt((Math.random() * variance) - (variance / 2)));
         sColor.setGreen(sColor.g + parseInt((Math.random() * variance) - (variance / 2)));
         sColor.setBlue(sColor.b + parseInt((Math.random() * variance) - (variance / 2)));
         sColor.setAlpha(sColor.a + parseInt((Math.random() * alphaVariance) - (alphaVariance / 2)));
 
+        //store square that is currently here
         let previous = squares[y][x];
         let s = new Square(x * size, y * size, size, sColor);
 
         if(previous == null || !previous.equals(s)){
           if(previous != null){
-            let alpha = Math.min(255, previous.color.a + sColor.a);
+            let alpha = Math.min(255, previous.color.a + sColor.a); //add alphas to each other for layering effect
             s.color.setAlpha(alpha);
           }
 
+          //push old state onto undo stack
           let state = new SquareState(x, y, squares[y][x]);
           if(undoStack.length == 0 || !undoStack[undoStack.length - 1].equals(state))
             undoStack.push(state);
 
+          //set old to new and draw it
           squares[y][x] = s;
           s.draw();
         }
 
-        if(grid)
+        if(grid)  //if grid is enabled, redraw grid on top of everything
           ctx.drawImage(gridImage, 0, 0, c.width, c.height);
       }
-      function fill(x, y, replace){
+      function fill(x, y, replace){ //flood fill algorithm; fills an enclosed area with given square. Called when F is pressed
+        //check if coordinates in bounds of canvas
         if(x < 0 || x * size >= c.width || y < 0 || y * size >= c.height)
           return;
 
         let cur = squares[y][x];
-        if((cur == null && replace == null) || (cur != null && cur.color.equalsWithin(replace, variance) && !cur.color.equalsWithin(color, variance))){
-          addSquare(x, y);
+        //if both are null OR current is NOT null AND its color is within variance of replacement AND
+        //its color is NOT within variance of current color
+        if((cur == null && replace == null) ||
+          (cur != null && cur.color.equalsWithin(replace, variance) && !cur.color.equalsWithin(color, variance))){
+          addSquare(x, y);  //set this square to current Color
+          //spread in all cardinal directions
           fill(x - 1, y, replace);
           fill(x + 1, y, replace);
           fill(x, y - 1, replace);
           fill(x, y + 1, replace);
         }
       }
-      function removeSquare(){
-        undoStack.push(new SquareState(Mouse.x, Mouse.y, squares[Mouse.y][Mouse.x]));
-        squares[Mouse.y][Mouse.x] = null;
-        ctx.clearRect(Mouse.x * size, Mouse.y * size, size, size);
+      function removeSquare(){  //erase squares. This is called when right click is pressed
+        undoStack.push(new SquareState(Mouse.x, Mouse.y, squares[Mouse.y][Mouse.x])); //add erased square to undo stack
+        squares[Mouse.y][Mouse.x] = null; //remove selected square
+        ctx.clearRect(Mouse.x * size, Mouse.y * size, size, size);  //clear that area of the canvas
       }
-      function drawSquares(){
-        ctx.clearRect(0, 0, c.width, c.height);
+      function drawSquares(){ //draw all squares
+        ctx.clearRect(0, 0, c.width, c.height); //clear whole screen
 
-        for(var i = 0; i < squares.length; i++)
+        for(var i = 0; i < squares.length; i++) //loop through grid and draw each element
           for(var j = 0; j < squares[i].length; j++)
             if(squares[i][j] !== null)
               squares[i][j].draw();
 
-        if(grid)
+        if(grid)  //if grid is enabled, draw it on top of everything
           ctx.drawImage(gridImage, 0, 0, c.width, c.height);
       }
-      function updateCanvas(){
+      function updateCanvas(){  //handle mouse input
+        //check bounds of cursor
         if(Mouse.x >= 0 && (Mouse.x + 1) * size <= c.width && Mouse.y >= 0 && (Mouse.y + 1) * size <= c.height){
-          if(Mouse.button === 0)
+          if(Mouse.button === 0)  //left click
             addSquare(Mouse.x, Mouse.y);
-          else if(Mouse.button === 2)
+          else if(Mouse.button === 2) //right click
             removeSquare();
-          if(grid)
+          if(grid)  //if grid is enabled, draw it on top of everything
             ctx.drawImage(gridImage, 0, 0, c.width, c.height);
         }
       }
 
 
-      let Mouse = {x: 0, y: 0, button: -1};
+      let Mouse = {x: 0, y: 0, button: -1}; //simple mouse object
       let canvasRect = c.getBoundingClientRect();
       window.onmousemove = function(e){
+        //if line mode is disabled OR line mode is enabled AND mouse moved more in x than in y
         if(!line || (line && e.movementX > e.movementY))
-          Mouse.x = parseInt(Math.floor((e.clientX - canvasRect.left) / size));
+          Mouse.x = parseInt(Math.floor((e.clientX - canvasRect.left) / size)); //convert mouse coordinates to canvas coordinates
+        //if line mode is disabled OR line mode is enabled AND mouse moved more in y than in x
         if(!line || (line && e.movementY > e.movementX))
+          //convert mouse coordinates to canvas coordinates and account for scrolling done on the webpage
           Mouse.y = parseInt(Math.floor((e.clientY - canvasRect.top) / size) + Math.floor(window.scrollY / size));
-        updateCanvas();
+        updateCanvas(); //handle new input
       }
-      window.onmousedown = function(e){
+      window.onmousedown = function(e){ //set object button to pressed button and handle input
         Mouse.button = e.button;
         updateCanvas();
       }
-      window.onmouseup = function(e){
+      window.onmouseup = function(e){ //set object button to nothing
         Mouse.button = -1;
       }
-      window.oncontextmenu = function(e){return false;}
+      window.oncontextmenu = function(e){return false;} //dsiable right click menu
+      //if this tab/window goes out of focus, disable mouse
       window.onblur = function(e){Mouse.button = -1;}
 
-      let line = false;
+      let line = false; //line mode
       window.onkeydown = function(e){
-        if(e.keyCode === 192){
-          let g = grid;
-          if(grid){
+        if(e.keyCode === 192){  //the grave (`) key that it used to save the canvas to an image
+          let g = grid; //save grid state
+          if(grid){ //if grid is enabled, disable it and then redraw everything else. Don't want to save grid as part of the image
             grid = false;
             drawSquares();
           }
 
-          let img = document.getElementById("image");
-          img.src = c.toDataURL();
+          let img = document.getElementById("image"); //image element
+          img.src = c.toDataURL();  //set image data to canvas data
 
           let xmin = c.width - size, ymin = c.height - size;
           let xmax = 0, ymax = 0;
 
-          if(!saveWhitespace){
+          if(!saveWhitespace){  //crop canvas so that only parts that have been drawn are saved
+            //loop through grid
             for(var i = 0; i < squares.length; i++){
               for(var j = 0; j < squares[i].length; j++){
                 let s = squares[i][j];
                 if(s == null)
                   continue;
+                //update boundaries
                 xmin = Math.min(s.x, xmin);
                 xmax = Math.max(s.x, xmax);
                 ymin = Math.min(s.y, ymin);
@@ -218,124 +237,124 @@
             }
           }
 
-          img.onload = function(){
-            img.onload = null;
+          img.onload = function(){  //when data is done being converted to image
+            img.onload = null;  //delete this function
 
-            ctx.clearRect(0, 0, c.width, c.height);
+            ctx.clearRect(0, 0, c.width, c.height); //clear canvas
 
-            if(!saveWhitespace){
+            if(!saveWhitespace){  //crop image so that only parts that have been drawn are saved
               let w = c.width, h = c.height;
               c.height = ymax - ymin + size;
               c.width = xmax - xmin + size;
 
-              ctx.drawImage(img, xmin, ymin, xmax - xmin + size, ymax - ymin + size, 0, 0, c.width, c.height);
-              img.src = c.toDataURL();
+              ctx.drawImage(img, xmin, ymin, xmax - xmin + size, ymax - ymin + size, 0, 0, c.width, c.height);  //draw cropped image to canvas
+              img.src = c.toDataURL();  //set this image to cropped image
 
+              //reset canvas dimensions
               c.width = w;
               c.height = h;
             }
-            else{
+            else{ //otherwise do nothing
               ctx.drawImage(img, 0, 0, c.width, c.height);
               img.src = c.toDataURL();
             }
 
-            ctx.clearRect(0, 0, c.width, c.height);
-            grid = g;
-            drawSquares();
+            ctx.clearRect(0, 0, c.width, c.height); //clear screen
+            grid = g; //reset grid to original value
+            drawSquares();  //redraw everything
           }
 
         }
-        else if(e.keyCode === 16)
+        else if(e.keyCode === 16) //shift - activate line mode
           line = true;
-        else if(e.keyCode === 70){
+        else if(e.keyCode === 70){  //f - fill enclosed area
           fill(Mouse.x, Mouse.y, (squares[Mouse.y][Mouse.x] ? squares[Mouse.y][Mouse.x].color : null));
           drawSquares();
         }
-        else if(e.keyCode === 67){
+        else if(e.keyCode === 67){  //c - copy color that is moused over
           let s = squares[Mouse.y][Mouse.x];
           if(s != null){
             color = s.color;
             setColorBars(color);
           }
         }
-        else if(e.keyCode === 90){
-
+        else if(e.keyCode === 90){ // z - undo last action
           let s = undoStack.pop();
           if(s != null){
-            //console.log(s.square);
-            redoStack.push(new SquareState(s.x, s.y, squares[s.y][s.x]));
-            squares[s.y][s.x] = s.square;
-            drawSquares();
+            redoStack.push(new SquareState(s.x, s.y, squares[s.y][s.x])); //push this undo operation to the redo stack
+            squares[s.y][s.x] = s.square; //undo last action
+            drawSquares();  //redraw everything
           }
         }
-        else if(e.keyCode === 89){
+        else if(e.keyCode === 89){  //y - redo last undone action
           let s = redoStack.pop();
           if(s != null){
-            let c = color;
-            color = s.square.color;
-            addSquare(s.x, s.y, true);
-            color = c;
+            let c = color;  //save current color
+            color = s.square.color; //set current color to saved color
+            addSquare(s.x, s.y, true);  //draw square (marked as redo operation to prevent it from clearing the stack)
+            color = c;  //reset color to original
           }
         }
       }
       window.onkeyup = function(e){
-        if(e.keyCode === 16)
+        if(e.keyCode === 16)  //shift - disable line mode
           line = false;
       }
-      function setColorBars(c){
+      function setColorBars(c){ //update sliders to current color values
         document.getElementById("red").value = c.r;
         document.getElementById("green").value = c.g;
         document.getElementById("blue").value = c.b;
         document.getElementById("alpha").value = c.a;
       }
 
-      document.getElementById("grid").onchange = function(){
-        grid = !grid;
-        drawSquares();
+      document.getElementById("grid").onchange = function(){  //grid checkbox
+        grid = !grid; //toggle boolean
+        drawSquares();  //redraw everything
       }
-      document.getElementById("size").onchange = function(){
+      document.getElementById("size").onchange = function(){  //change size of each square
         size = parseInt(document.getElementById("size").value);
         changePixelSize();
       }
-      document.getElementById("canvasWidth").onchange = function(){
+      document.getElementById("canvasWidth").onchange = function(){ //resize canvas
         changeCanvasSize(parseInt(document.getElementById("canvasWidth").value) * size, c.height);
         drawSquares();
       }
-      document.getElementById("canvasHeight").onchange = function(){
+      document.getElementById("canvasHeight").onchange = function(){  //resize canvas
         changeCanvasSize(c.width, parseInt(document.getElementById("canvasHeight").value) * size);
+        drawSquares();
       }
 
-      document.getElementById("varianceSlider").onchange = function(){
+      document.getElementById("varianceSlider").onchange = function(){  //set variance to value on slider
         variance = parseInt(document.getElementById("varianceSlider").value);
         document.getElementById("varianceNumber").value = variance;
       }
-      document.getElementById("varianceNumber").onchange = function(){
+      document.getElementById("varianceNumber").onchange = function(){  //set variance to value in text field
         variance = parseInt(document.getElementById("varianceNumber").value);
         document.getElementById("varianceSlider").value = variance;
       }
-      document.getElementById("alphaVariance").onchange = function(){
+      document.getElementById("alphaVariance").onchange = function(){ //set alpha variance to value on slider
         alphaVariance = parseInt(document.getElementById("alphaVariance").value);
       }
-      document.getElementById("whitespace").onclick = function(){
+      document.getElementById("whitespace").onclick = function(){ //toggle saveWhitespace
         saveWhitespace = !saveWhitespace
       }
-      document.getElementById("clear").onclick = function(){
+      document.getElementById("clear").onclick = function(){  //clear canvas
         for(var i = 0; i < squares.length; i++)
           for(var j = 0; j < squares[i].length; j++)
             squares[i][j] = null;
 
         drawSquares();
       }
-      document.getElementById("red").onchange = function(){
+      document.getElementById("red").onchange = function(){ //set red to value on slider
         color.setRed(parseInt(document.getElementById("red").value));
       }
-      document.getElementById("green").onchange = function(){
+      document.getElementById("green").onchange = function(){ //set green to value on slider
         color.setGreen(parseInt(document.getElementById("green").value));
       }
-      document.getElementById("blue").onchange = function(){
+      document.getElementById("blue").onchange = function(){  //set blue to value on slider
         color.setBlue(parseInt(document.getElementById("blue").value));
       }
-      document.getElementById("alpha").onchange = function(){
+      document.getElementById("alpha").onchange = function(){ //set alpha to value on slider
         color.setAlpha(parseInt(document.getElementById("alpha").value));
       }
     </script>
