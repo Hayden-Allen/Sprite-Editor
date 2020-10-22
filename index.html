@@ -29,7 +29,8 @@
         Green: <input type = "range" min = "0" max = "255" value = "0" id ="green"/>
         Blue:  <input type = "range" min = "0" max = "255" value = "0" id ="blue"/>
         Alpha: <input type = "range" min = "0" max = "255" value = "255" id ="alpha"/>
-    <br><img id = "image">
+    <br>Name: <input type = "text" id = "spriteName" value = "newSprite"/>
+        <button style = "background-color: #66ee00;" onclick = "Save();">SAVE</button>
 
     <script src = "Square.js"></script>
     <script src = "SquareState.js"></script>
@@ -52,6 +53,69 @@
       changePixelSize();
       changeCanvasSize(c.width, c.height);
       drawSquares();
+
+      function Save()
+      {
+        let g = grid; //save grid state
+        if(grid){ //if grid is enabled, disable it and then redraw everything else. Don't want to save grid as part of the image
+          grid = false;
+          drawSquares();
+        }
+
+        let img = new Image();
+        img.src = c.toDataURL();  //set image data to canvas data
+
+        let xmin = c.width - size, ymin = c.height - size;
+        let xmax = 0, ymax = 0;
+
+        if(!saveWhitespace){  //crop canvas so that only parts that have been drawn are saved
+          //loop through grid
+          for(var i = 0; i < squares.length; i++){
+            for(var j = 0; j < squares[i].length; j++){
+              let s = squares[i][j];
+              if(s == null)
+                continue;
+              //update boundaries
+              xmin = Math.min(s.x, xmin);
+              xmax = Math.max(s.x, xmax);
+              ymin = Math.min(s.y, ymin);
+              ymax = Math.max(s.y, ymax);
+            }
+          }
+        }
+
+        img.onload = function(){  //when data is done being converted to image
+          img.onload = null;
+          // save image
+          let a = document.createElement('a');
+          a.href = c.toDataURL();
+          a.download = `${document.getElementById("spriteName").value}.png`;
+          a.click();
+
+          ctx.clearRect(0, 0, c.width, c.height); //clear canvas
+
+          if(!saveWhitespace){  //crop image so that only parts that have been drawn are saved
+            let w = c.width, h = c.height;
+            c.height = ymax - ymin + size;
+            c.width = xmax - xmin + size;
+
+            ctx.drawImage(img, xmin, ymin, xmax - xmin + size, ymax - ymin + size, 0, 0, c.width, c.height);  //draw cropped image to canvas
+            img.src = c.toDataURL();  //set this image to cropped image
+
+            //reset canvas dimensions
+            c.width = w;
+            c.height = h;
+          }
+          else{ //otherwise do nothing
+            ctx.drawImage(img, 0, 0, c.width, c.height);
+            img.src = c.toDataURL();
+          }
+
+          ctx.clearRect(0, 0, c.width, c.height); //clear screen
+          grid = g; //reset grid to original value
+          drawSquares();  //redraw everything
+        }
+      }
 
       function changeCanvasSize(w, h){
         c.width = w;
@@ -208,64 +272,7 @@
 
       let line = false; //line mode
       window.onkeydown = function(e){
-        if(e.keyCode === 192){  //the grave (`) key that it used to save the canvas to an image
-          let g = grid; //save grid state
-          if(grid){ //if grid is enabled, disable it and then redraw everything else. Don't want to save grid as part of the image
-            grid = false;
-            drawSquares();
-          }
-
-          let img = document.getElementById("image"); //image element
-          img.src = c.toDataURL();  //set image data to canvas data
-
-          let xmin = c.width - size, ymin = c.height - size;
-          let xmax = 0, ymax = 0;
-
-          if(!saveWhitespace){  //crop canvas so that only parts that have been drawn are saved
-            //loop through grid
-            for(var i = 0; i < squares.length; i++){
-              for(var j = 0; j < squares[i].length; j++){
-                let s = squares[i][j];
-                if(s == null)
-                  continue;
-                //update boundaries
-                xmin = Math.min(s.x, xmin);
-                xmax = Math.max(s.x, xmax);
-                ymin = Math.min(s.y, ymin);
-                ymax = Math.max(s.y, ymax);
-              }
-            }
-          }
-
-          img.onload = function(){  //when data is done being converted to image
-            img.onload = null;  //delete this function
-
-            ctx.clearRect(0, 0, c.width, c.height); //clear canvas
-
-            if(!saveWhitespace){  //crop image so that only parts that have been drawn are saved
-              let w = c.width, h = c.height;
-              c.height = ymax - ymin + size;
-              c.width = xmax - xmin + size;
-
-              ctx.drawImage(img, xmin, ymin, xmax - xmin + size, ymax - ymin + size, 0, 0, c.width, c.height);  //draw cropped image to canvas
-              img.src = c.toDataURL();  //set this image to cropped image
-
-              //reset canvas dimensions
-              c.width = w;
-              c.height = h;
-            }
-            else{ //otherwise do nothing
-              ctx.drawImage(img, 0, 0, c.width, c.height);
-              img.src = c.toDataURL();
-            }
-
-            ctx.clearRect(0, 0, c.width, c.height); //clear screen
-            grid = g; //reset grid to original value
-            drawSquares();  //redraw everything
-          }
-
-        }
-        else if(e.keyCode === 16) //shift - activate line mode
+        if(e.keyCode === 16) //shift - activate line mode
           line = true;
         else if(e.keyCode === 70){  //f - fill enclosed area
           fill(Mouse.x, Mouse.y, (squares[Mouse.y][Mouse.x] ? squares[Mouse.y][Mouse.x].color : null));
